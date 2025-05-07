@@ -1,279 +1,267 @@
-
 # 📊 Active Data Callout System
 
 ## Overview
 
-The **Active Data Callout System** enhances product detail pages (PDPs) across our Salesforce Commerce Cloud (SFCC) sites by injecting live product engagement metrics directly into content assets.
+The **Active Data Callout System** injects live product engagement metrics — such as views, orders, units sold, and revenue — into content areas like product detail pages (PDPs) on Salesforce Commerce Cloud (SFCC).
 
-This feature displays dynamic labels like "🔥 Trending" or "⭐ Popular" based on real-time product data such as views and orders. It helps customers make confident purchase decisions by showcasing product popularity.
+These metrics are rendered as dynamic callouts (e.g., 🔥 *Hot Right Now*, 🛒 *Popular Pick*) that visually communicate product interest tiers. They're fully customizable, driven by backend logic and content asset markup, and optionally gated behind A/B tests.
 
-### ✅ Key Features
+This system supports:
 
-- Backend-calculated thresholds (site-wide or overridden per asset)
-- Reusable frontend templates via content assets
-- Supports **views**, **orders**, and other metrics
-- Animation effects (shine, flicker, bounce, shake)
-- Fully configurable via data attributes
-- Non-breaking: gracefully hides on missing or invalid data
-- Supports A/B testing (e.g. `ActiveData` flag)
+- ✅ Backend-calculated thresholds using site preferences
+- ✅ Metric-specific tier defaults (label + emoji)
+- ✅ Full override flexibility via HTML attributes
+- ✅ Animation and styling for attention
+- ✅ Graceful fallback behavior to avoid rendering issues
 
-### 📌 Where It’s Used
+## ✅ Key Features
 
-- Product Detail Pages (PDPs)
-- Content Assets in WYSIWYG
-- A/B Test Variants
+- **Metric Flexibility**  
+  Supports multiple product-level metrics:
+  - `weeklyViews`
+  - `weeklyOrders`
+  - `weeklyUnitsSold`
+  - `weeklyRevenue`
 
-### 🔒 Permissions Required
+- **Backend-Driven Tiers**  
+  Tiers (`low`, `medium`, `high`) are assigned using site preference thresholds or asset-specific overrides.
 
-| Role        | Access Needed                      |
-|-------------|------------------------------------|
-| Developer   | Code integration & cartridge edits |
-| Marketing   | Content asset setup                |
-| Admin       | Site Preferences in Business Manager |
+- **Fully Customizable Content**  
+  Authors can override:
+  - Tier thresholds (`data-low`, `data-medium`, `data-high`)
+  - Labels (`data-label`, `data-label-high`, etc.)
+  - Emojis (`data-emoji`, `data-emoji-low`, etc.)
 
+- **Dynamic Frontend Rendering**  
+  Callouts are populated client-side using JSON injected on page load.
 
-## How It Works
+- **Safe Fallbacks**  
+  If data is missing or malformed, callouts are hidden automatically to avoid UI issues.
 
-The Active Data Callout System is composed of three main layers:
+- **A/B Test Ready**  
+  Optional gating via SFCC A/B testing campaigns.
 
----
+## 🧠 System Architecture & Data Flow
 
-### 🧠 1. Backend Data Formatter (Controller + Helper)
+The Active Data Callout system is composed of three main layers:
 
-On PDP load, the `Show` controller:
-- Retrieves the product using the `pid` query string parameter
-- Extracts the `activeData` object (if available)
-- Passes it to the `getFormattedMetrics()` helper method
+### 1. **Backend Formatter (`getFormattedMetrics`)**
 
-#### 🔁 Backend Helper Logic
-
-- Formats numerical values with commas (e.g. `14,000`)
-- Evaluates thresholds using global site preferences:
-  - `viewsThresholdLow`
-  - `viewsThresholdMedium`
-  - `viewsThresholdHigh`
-- Assigns a tier (`low`, `medium`, or `high`) per metric
-- Returns a structured object to inject into the frontend
-
-The resulting JSON is injected into the page:
-```html
-<div id="metrics-json" style="display: none;">
-  ${pdict.metricsJSONString}
-</div>
-```
-
-### 🎨 2. Frontend Renderer (JavaScript)
-
-When the DOM is ready:
-- Parses the JSON in `#metrics-json`
-- Finds all `.social-proof` elements on the page
-- Extracts attributes like `data-key`, `data-template`, `data-low`, `data-label`, etc.
-- Replaces template placeholders with live metric data
-
-#### Example Behavior
-
-If the metric `viewsWeek = 500` and thresholds are:
-- `low = 100`
-- `medium = 300`
-- `high = 600`
-
-Then:
-- The tier is determined as `medium`
-- The label is resolved as `⭐ Popular`
-- The final rendered output becomes:
-
-```html
-<span class="label-text medium">⭐ Popular</span>: 500 views
-```
-### ✏️ 3. Content Asset Markup
-
-Each callout is defined directly inside a WYSIWYG content asset using the following structure:
-
-```html
-<div class="social-proof"
-     data-key="weeklyViews"
-     data-label="🔥 Trending Now"
-     data-template="<span class='label-text ${tier}'>${label}</span>: ${value} views">
-</div>
-```
-
-This setup gives content authors full control over how the callout appears. The supported attributes are:
-
-| Attribute       | Description                                                               |
-|----------------|---------------------------------------------------------------------------|
-| `data-key`      | The metric to pull from backend data (e.g., `weeklyViews`, `weeklyOrders`) |
-| `data-template` | The HTML template string with placeholders (`${value}`, `${tier}`…)         |
-| `data-low`      | Optional: override low threshold for this asset only                      |
-| `data-medium`   | Optional: override medium threshold for this asset only                   |
-| `data-high`     | Optional: override high threshold for this asset only                     |
-| `data-label`    | Optional: override the default label for this tier                        |
-| `data-emoji`    | Optional: override the emoji for this tier                                |
-
-[📷 Screenshot Placeholder: WYSIWYG content asset example with metric callouts]
-
-
-## 🔧 Backend Setup
-
-### ⚙️ 1. Controller & Helper Integration
-
-The backend logic that powers the Active Data Callout system is located in two main places:
-
----
-
-#### 📁 Controller: `Product-Show`
-
-In the `server.append('Show')` route for PDP pages, the controller:
-
-- Retrieves the product via `ProductMgr.getProduct(req.querystring.pid)`
-- Checks if the product has `.activeData` attached
-- Calls the `getFormattedMetrics(product)` helper
-- Converts the result to a JSON string and sets it on `pdict.metricsJSONString`
-
-```js
-viewData.metricsJSONString = JSON.stringify(
-    productHelpers.getFormattedMetrics(product)
-);
-```
-
-This exposes the structured metrics object to the frontend via:
-
-```html
-<div id="metrics-json" style="display: none;">
-  ${pdict.metricsJSONString}
-</div>
-```
----
-
-#### 🧰 Helper: `getFormattedMetrics(product)`
-
-This helper:
-- Pulls raw product data from `product.activeData`
-- Looks up threshold values from site preferences
-- Applies tier logic (`low`, `medium`, `high`)
-- Formats numbers for display (e.g., `14,000`)
-- Returns a structured object like:
+- Reads `product.activeData` fields for supported metrics.
+- Looks up tier thresholds from **site preferences**.
+- Calculates tier (`low`, `medium`, `high`) based on values.
+- Formats numbers (e.g., `1200` → `1,200`) for display.
+- Injects results into `pdict.metricsJSONString` as JSON.
 
 ```json
 {
   "weeklyViews": {
-    "value": "14,000",
-    "tier": "high",
+    "value": "1,200",
+    "tier": "medium",
     "thresholds": {
-      "low": 11,
-      "medium": 31,
-      "high": 66
+      "low": 100,
+      "medium": 200,
+      "high": 400
     }
   }
 }
 ```
 
-If no `activeData` is present, it returns an empty object.
+### 2. **Controller Integration (`Product-Show`)**
 
-### 🛠️ 2. Site Preferences Configuration
+- Checks for `req.querystring.pid` and gets the product.
+- Calls `getFormattedMetrics(product)` and assigns it to `pdict.metricsJSONString`.
+- Also sets `pdict.activeDataJSONString` for debugging (optional).
 
-Thresholds for metrics (e.g., weekly views) are managed through custom **site preferences** in Business Manager. These allow centralized control over what qualifies as "low", "medium", or "high" across all content assets — unless overridden directly in the HTML.
-
----
-
-#### 🎛️ Preference Keys Used
-
-| Preference ID            | Purpose                        | Fallback Value |
-|--------------------------|--------------------------------|----------------|
-| `viewsThresholdLow`      | Lower bound for "low" tier     | `11`           |
-| `viewsThresholdMedium`   | Lower bound for "medium" tier  | `31`           |
-| `viewsThresholdHigh`     | Lower bound for "high" tier    | `66`           |
-
----
-
-#### 📍 Where to Configure
-
-1. Go to **Merchant Tools** → **Sites** → **[Your Site]** → **Preferences** → **Custom Preferences**
-2. Locate or create a preference group (e.g., `ActiveDataConfig`)
-3. Add or update the following:
-   - `viewsThresholdLow`
-   - `viewsThresholdMedium`
-   - `viewsThresholdHigh`
-
----
-
-#### 📌 Example Code Usage
-
-In the helper function, these are retrieved via:
-
-```js
-const site = Site.getCurrent();
-const globalThresholds = {
-    low: site.getCustomPreferenceValue('viewsThresholdLow') || 11,
-    medium: site.getCustomPreferenceValue('viewsThresholdMedium') || 31,
-    high: site.getCustomPreferenceValue('viewsThresholdHigh') || 66
-};
+```html
+<div id="metrics-json" style="display: none;">
+  ${pdict.metricsJSONString}
+</div>
 ```
 
-## 🎨 Frontend Behavior & Styling
+### 3. **Frontend Renderer (`productDetail.js`)**
 
-The frontend script dynamically injects product metric labels into `.social-proof` blocks using a combination of:
+- Parses `#metrics-json` content on DOM ready.
+- Loops through all `.social-proof` blocks.
+- Matches `data-key` to the metric JSON.
+- Applies tier using:
+  - Inline thresholds if provided (`data-low`, etc.)
+  - Fallback to site thresholds from backend
+- Replaces template placeholders:
+  - `${value}`, `${tier}`, `${label}`, `${emoji}`
+- Removes the block if the metric is invalid or tier is `no-data`.
 
-- JSON data from the backend
-- HTML templates in `data-template`
-- Tier evaluation (`low`, `medium`, `high`, or `no-data`)
-- Optional styling animations via CSS classes
+## 📏 Supported Metrics & Thresholds
 
----
+The system supports four primary product engagement metrics, each with its own default threshold configuration and logic.
 
-### 🧩 Default Tier Definitions
+| Metric Key         | Source Field     | Site Preference Keys                          |
+|--------------------|------------------|-----------------------------------------------|
+| `weeklyViews`      | `viewsWeek`      | `viewsThresholdLow/Medium/High`               |
+| `weeklyOrders`     | `ordersWeek`     | `ordersThresholdLow/Medium/High`              |
+| `weeklyUnitsSold`  | `unitsWeek`      | `unitsThresholdLow/Medium/High`               |
+| `weeklyRevenue`    | `revenueWeek`    | `revenueThresholdLow/Medium/High`             |
 
-When no custom label or emoji is provided, the system uses these built-in tier values:
+### 📦 Sample Output (Backend JSON)
 
-| Tier       | Label       | Emoji | Notes                        |
-|------------|-------------|-------|------------------------------|
-| `high`     | Trending    | 🔥    | Highlights hot-selling items |
-| `medium`   | Popular     | ⭐    | Solid-performing products     |
-| `low`      | Low         | (none) | Not drawing much attention   |
-| `no-data`  | No Data     | ⚠️    | Shown only if value is missing or invalid
-
-These defaults can be overridden using `data-label` and `data-emoji` in the HTML.
-
----
-
-### 🎭 Supported Animations
-
-CSS classes can be included in the HTML templates to make the labels more attention-grabbing:
-
-| Class Name      | Animation           | Description                                 |
-|-----------------|---------------------|---------------------------------------------|
-| `flame-flicker` | 🔥 Flicker          | Emulates fire movement                      |
-| `shine`         | ✨ Shine (Text Glow) | Animated shimmer effect for text            |
-| `bounce-slow`   | 🎯 Bounce           | Gently lifts and drops element              |
-| `pulse`         | ⚡ Pulse             | Slight pulsing of scale and opacity         |
-| `shake`         | 🚨 Shake            | Horizontal vibration for urgency or warning |
-
----
-
-### 🧪 Fallback Logic
-
-To avoid visual issues, the system automatically hides invalid or unsupported blocks:
-
-- If `#metrics-json` is missing or malformed → No metrics rendered
-- If `data-key` is not found in the JSON → Block is removed
-- If the metric value is not a number → Block is removed
-- If no thresholds are configured and no tier exists → Block is removed
-
-```js
-if (!key || !tpl || !metrics[key]) {
-    el.remove();
-    return;
+```json
+{
+  "weeklyRevenue": {
+    "value": "3,500",
+    "tier": "medium",
+    "thresholds": {
+      "low": 1000,
+      "medium": 3000,
+      "high": 5000
+    }
+  }
 }
 ```
 
+### ⚙️ Fallback Defaults
+
+If no site preference is set, the system uses hardcoded defaults in the helper:
+
+- **weeklyViews**: 11 / 31 / 66
+- **weeklyOrders**: 5 / 10 / 20
+- **weeklyUnitsSold**: 15 / 40 / 80
+- **weeklyRevenue**: 1000 / 3000 / 5000
+
+## 🎨 Frontend Behavior
+
+The frontend script runs when the DOM is ready and renders `.social-proof` blocks using the injected JSON metrics.
+
+### 🧪 Rendering Flow
+
+1. Reads and parses the hidden `#metrics-json` block.
+2. For each `.social-proof` element:
+   - Retrieves `data-key` and matches it to a metric in the JSON.
+   - Parses the raw number value from `metric.value`.
+   - Resolves thresholds from:
+     - `data-low`, `data-medium`, `data-high` attributes (if present), **OR**
+     - `metric.thresholds` from backend.
+   - Determines tier based on thresholds.
+   - Picks label and emoji using:
+     - `data-label-*` or `data-emoji-*` overrides
+     - Or metric-specific defaults for the current tier.
+   - Replaces template placeholders: `${value}`, `${tier}`, `${label}`, `${emoji}`.
+3. If the value is invalid or tier is `no-data`, the block is removed.
+
+### ✅ Example Tier Logic (in JS)
+
+```js
+if (rawNumber >= high) {
+  tier = 'high';
+} else if (rawNumber >= medium) {
+  tier = 'medium';
+} else if (rawNumber >= low) {
+  tier = 'low';
+} else {
+  tier = 'no-data';
+}
+```
+
+### 🧼 Fallback Handling
+
+Block is removed if:
+
+- `data-key` is missing or invalid.
+- Metric value is not a valid number.
+- Tier is `no-data`.
+- JSON block is missing or malformed.
+
+This ensures clean, error-free rendering — only valid callouts appear on the page.
+
+## 🛠️ Customizing Labels, Emojis, and Thresholds
+
+You can customize the behavior and appearance of each callout block using `data-*` attributes in your content asset markup.
+
+### 🧩 Supported Attributes
+
+| Attribute               | Description                                                                 |
+|-------------------------|-----------------------------------------------------------------------------|
+| `data-key`              | Required. Metric key to use (`weeklyViews`, `weeklyRevenue`, etc.)          |
+| `data-template`         | Required. HTML template string with placeholders like `${value}`            |
+| `data-low/medium/high`  | Optional. Override backend thresholds for this block only                   |
+| `data-label`            | Optional. Generic label override (applies to all tiers)                     |
+| `data-label-high`       | Optional. Override label only for `high` tier                               |
+| `data-label-medium`     | Optional. Override label only for `medium` tier                             |
+| `data-label-low`        | Optional. Override label only for `low` tier                                |
+| `data-emoji`            | Optional. Generic emoji override                                            |
+| `data-emoji-high`       | Optional. Emoji for `high` tier only                                        |
+| `data-emoji-medium`     | Optional. Emoji for `medium` tier only                                      |
+| `data-emoji-low`        | Optional. Emoji for `low` tier only                                         |
+
+### 💡 Example with Per-Tier Overrides
+
+```html
+<div class="social-proof"
+     data-key="weeklyRevenue"
+     data-low="1000"
+     data-medium="3000"
+     data-high="5000"
+     data-label-low="Needs Love"
+     data-label-medium="Doing Well"
+     data-label-high="Killing It 💸"
+     data-emoji-high="💸"
+     data-template="<div class='proof-label-box ${tier}'><span class='emoji-wrapper'>${emoji}</span> <span class='label-text ${tier}'>${label}</span>: ${value} earned</div>">
+</div>
+```
+
+### 🖼️ Template Placeholders
+
+The following placeholders are supported inside `data-template`:
+
+- `${value}` — formatted number (e.g., 3,200)
+- `${tier}` — resolved tier (low, medium, high)
+- `${label}` — default or overridden label
+- `${emoji}` — default or overridden emoji
+
+## 🎯 Default Tier Labels & Emojis (Per Metric)
+
+If no custom `data-label` or `data-emoji` is provided, the system uses predefined labels and emojis per tier for each metric.
+
+### 🧾 `weeklyViews`
+
+| Tier     | Default Label     | Default Emoji |
+|----------|-------------------|---------------|
+| High     | Hot Right Now     | 🔥            |
+| Medium   | Popular Pick      | ⚡            |
+| Low      | Hidden Gem        | 💎            |
+| No Data  | No Data           | (none)        |
+
+### 📦 `weeklyOrders`
+
+| Tier     | Default Label     | Default Emoji |
+|----------|-------------------|---------------|
+| High     | Best Seller       | 🏅            |
+| Medium   | Popular Choice    | 📬            |
+| Low      | Needs a Push      | 🛒            |
+| No Data  | No Data           | (none)        |
+
+### 📈 `weeklyUnitsSold`
+
+| Tier     | Default Label        | Default Emoji |
+|----------|----------------------|---------------|
+| High     | Flying Off the Shelf | 🚀            |
+| Medium   | On the Rise          | 📈            |
+| Low      | Under the Radar      | 📉            |
+| No Data  | No Data              | (none)        |
+
+### 💰 `weeklyRevenue`
+
+| Tier     | Default Label     | Default Emoji |
+|----------|-------------------|---------------|
+| High     | Top Performer     | 🏆            |
+| Medium   | Solid Seller      | 💰            |
+| Low      | Room to Grow      | 🛠️            |
+| No Data  | No Data           | (none)        |
+
 ## 🧱 Content Asset Usage Examples
 
-These examples show how to use the `.social-proof` system within content assets by mixing global preferences with per-block overrides.
+Below are examples of how to use the `.social-proof` component inside WYSIWYG content assets or page markup.
 
----
-
-### 📌 Example 1: Full Threshold Override
-
-This example uses custom `low`, `medium`, and `high` thresholds for the `weeklyViews` metric, overriding the default site preferences:
+### 📌 Example 1: Custom Thresholds & Styling
 
 ```html
 <div class="social-proof"
@@ -281,42 +269,26 @@ This example uses custom `low`, `medium`, and `high` thresholds for the `weeklyV
      data-low="100"
      data-medium="160"
      data-high="300"
-     data-template="<div class='proof-label-box ${tier}'><span class='emoji-wrapper flame-flicker'>${emoji}</span> <span class='label-text ${tier}'>Custom Thresholds</span>: ${value} people saw this</div>">
+     data-template="<div class='proof-label-box ${tier}'><span class='emoji-wrapper flame-flicker'>${emoji}</span> <span class='label-text ${tier}'>Custom Thresholds</span>: ${value} people viewed this</div>">
 </div>
 ```
 
-**Thresholds:**
+✅ Uses hardcoded thresholds instead of site prefs  
+✅ Includes animation (flame-flicker class)
 
--   Low ≥ 100
-    
--   Medium ≥ 160
-    
--   High ≥ 300
-    
-
-Includes a custom visual template using `proof-label-box` and `flame-flicker`.
-
-### 🔄 Example 2: Metric Swap (`weeklyOrders`)
-
-This example uses a different backend metric — `weeklyOrders` — to display the number of recent purchases instead of product views.
+### 🔁 Example 2: Different Metric – weeklyOrders
 
 ```html
 <div class="social-proof"
      data-key="weeklyOrders"
-     data-template="<div class='proof-label ${tier}'><span class='emoji-wrapper'>${emoji}</span> <span class='label-text ${tier} shine'>${label}</span>: ${value} orders</div>">
+     data-template="<div class='proof-label ${tier}'><span class='emoji-wrapper'>${emoji}</span> <span class='label-text ${tier} shine'>${label}</span>: ${value} orders this week</div>">
 </div>
 ```
-**Behavior:**
 
--   Uses `weeklyOrders` instead of `weeklyViews`
-    
--   Uses the default thresholds (if defined in backend) or falls back to low/medium/high logic
-    
--   Applies the `shine` animation to the label for visual emphasis
+✅ Uses built-in backend thresholds for weeklyOrders  
+✅ Applies shine animation to label
 
-### ⚠️ Example 3: Handling Missing or Invalid Metrics
-
-If a metric is missing from the backend JSON or fails validation (e.g., it's not a number), the block will automatically be removed from the DOM to avoid displaying broken or misleading UI.
+### ⚠️ Example 3: Invalid Metric Handling
 
 ```html
 <div class="social-proof"
@@ -324,173 +296,108 @@ If a metric is missing from the backend JSON or fails validation (e.g., it's not
      data-template="<div class='proof-label ${tier}'><span class='emoji-wrapper shake'>${emoji}</span> <span class='label-text ${tier} shake'>MISSING</span>: ${value}</div>">
 </div>
 ```
-**Behavior:**
 
--   The system looks for `nonexistentMetric` in the JSON object
-    
--   Since the key doesn't exist, the element is removed entirely
-    
--   Optional: You can use `shake` to visually highlight problematic entries during QA
-    
+❌ Will not render — nonexistentMetric is not in backend JSON  
+✅ Cleanly removed by JS fallback logic
 
-This fallback ensures content assets **fail silently and cleanly**, without confusing the shopper.
-
-### 🖊️ Example 4: Manual Label and Emoji Overrides
-
-This example shows how to override both the label and emoji using `data-label` and `data-emoji`, regardless of what tier the system determines.
+### 🖊️ Example 4: Full Label & Emoji Overrides by Tier
 
 ```html
 <div class="social-proof"
-     data-key="weeklyViews"
-     data-label="💣 Exploding Views"
-     data-emoji="🔥"
-     data-template="<div class='proof-label ${tier}'><span class='emoji-wrapper flame-flicker'>${emoji}</span> <span class='label-text ${tier} shine'>${label}</span> — ${value}</div>">
+     data-key="weeklyRevenue"
+     data-label-low="Slow Start"
+     data-label-medium="Good Traction"
+     data-label-high="Profit Machine"
+     data-emoji-low="🟡"
+     data-emoji-medium="🟢"
+     data-emoji-high="💰"
+     data-template="<div class='proof-label-box ${tier}'><span class='emoji-wrapper pulse'>${emoji}</span> <span class='label-text ${tier}'>${label}</span> — ${value} revenue</div>">
 </div>
 ```
 
-**Behavior:**
+✅ Overrides both label and emoji for each tier  
+✅ Adds pulse animation
 
--   Replaces the tier-based label with a custom one: `💣 Exploding Views`
-    
--   Forces the emoji to always be `🔥`, regardless of tier
-    
--   Still uses the `tier` internally to apply styling and logic
+## 🧪 A/B Testing & Gating (Optional)
 
-## 🧪 Testing, Debugging & Fallback Behavior
+The Active Data Callout system can be conditionally activated for users participating in an A/B test campaign. This allows you to measure the impact of callouts on engagement and conversion without exposing the feature site-wide.
 
-The Active Data Callout system is designed to be fault-tolerant and easy to debug. Below are steps to verify functionality, isolate issues, and confirm expected behavior.
+### 🔀 ISML Conditional Wrapper
 
----
-
-### ✅ How to Verify It’s Working
-
-1. Inspect the page source on a PDP:
-   - Confirm `#metrics-json` exists
-   - Confirm it contains a valid JSON object with keys like `weeklyViews`, `weeklyOrders`, etc.
-
-2. In the DOM, look for rendered `.social-proof` blocks:
-   - Each block should contain styled HTML with text like `🔥 Trending: 1,500 views`
-
-3. Check the frontend console (DevTools):
-   - No errors from parsing or rendering
-   - No warnings about missing `data-key`
-
----
-
-### 🐞 Common Issues & Fixes
-
-| Symptom                           | Likely Cause                                     | Fix                                                     |
-|----------------------------------|--------------------------------------------------|----------------------------------------------------------|
-| Callouts not showing             | `metrics-json` div is missing                    | Ensure `pdict.metricsJSONString` is set in controller   |
-| Empty or default values shown    | `activeData` is missing on product               | Check if product has active metrics                     |
-| Wrong tiers displaying           | Thresholds are misconfigured or not numeric      | Double-check site preference values or HTML attributes  |
-| Callouts disappearing silently   | Invalid/missing `data-key`, or bad template      | Check that `metrics[key]` exists and templates are valid |
-
----
-
-### 🧼 Fallback Logic Recap
-
-The system **removes** a `.social-proof` block entirely if:
-
-- `#metrics-json` is missing or malformed
-- `data-key` does not exist in the JSON object
-- Metric value is not a valid number
-- No thresholds exist and no tier fallback is defined
-- The tier is resolved to `no-data`
-
-This ensures shoppers only see **meaningful** labels — never broken or misleading data.
-
-## 🧪 A/B Testing Configuration (Optional)
-
-The Active Data Callout system is optionally gated behind an A/B test flag to allow phased rollout and experimentation.
-
----
-
-### 🔀 ISML Conditional
-
-This block wraps the entire Active Data section to restrict it to test participants only:
+Wrap the entire Active Data logic in a campaign check to only show it for test participants:
 
 ```html
 <isif condition="${dw.campaign.ABTestMgr.isParticipant('ActiveData', 'activeData')}">
-    <div class="active-data">
-        <div id="metrics-json" style="display: none;">
-            ${pdict.metricsJSONString}
-        </div>
-        <div class="d-block d-md-none">
-            <isslot id="active-data-slot" description="Product active data" context="global" context-object="${pdict.product.raw}" />
-        </div>
+    <div id="metrics-json" style="display: none;">
+        ${pdict.metricsJSONString}
     </div>
+    <isslot id="active-data-slot"
+            description="Product active data"
+            context="global"
+            context-object="${pdict.product.raw}" />
 </isif>
 ```
 
-### 🧪 Campaign Setup (in Business Manager)
+### ⚙️ Business Manager Setup
 
-1.  Go to **Merchant Tools** → **Online Marketing** → **A/B Tests**
-    
-2.  Create or locate a campaign named `ActiveData`
-    
-3.  Add a test variation also named `activeData`
-    
-4.  Assign participants, duration, and targeting rules as needed
-    
+1. Go to Merchant Tools → Online Marketing → A/B Tests
+2. Create or locate a campaign named ActiveData
+3. Add a test variation also named activeData
+4. Assign participants, targeting rules, and test duration
+5. Use dw.campaign.ABTestMgr in ISML to gate frontend logic
 
-----------
+### 🧼 Gating Behavior
 
-### 🧼 Fallback Behavior
+If a shopper is not part of the test:
 
-If the current session is **not** part of the test:
+- The #metrics-json block is not rendered
+- No .social-proof elements are processed
+- The site behaves as if the feature doesn't exist (no errors or visual disruption)
 
--   The `metrics-json` block and `.social-proof` elements are never rendered
-    
--   No JavaScript errors occur
-    
--   The user sees the original content without Active Data enhancements
+This ensures a clean, test-safe implementation of the feature.
 
-## ✅ Summary & Final Notes
+## 🧼 Fallbacks, Debugging & Summary
 
-The Active Data Callout system provides a flexible, scalable way to enhance product pages with real-time social proof. It gives developers, marketers, and decision-makers a powerful tool for improving engagement and conversions — without constant code changes.
+The system includes built-in safety checks and graceful degradation to avoid breaking the user experience.
 
----
+### 🧪 Fallback Logic (Frontend)
 
-### 🚀 Key Benefits
+A `.social-proof` block is automatically **removed** from the page if:
 
-- Fully backend-driven: updates reflect live product activity
-- Marketing-friendly: no deployment needed for visual edits
-- Site-wide configurable via Business Manager
-- Supports A/B testing for safe rollout and experimentation
-- Graceful fallbacks ensure no broken content
+- `#metrics-json` is missing or invalid
+- `data-key` is not found in the backend JSON
+- `metric.value` is not a valid number
+- Thresholds are misconfigured (e.g., low ≥ medium)
+- Final `tier` is `no-data`
 
----
+### 🧰 Debugging Tips
 
-### 🧰 What You Can Customize
+- **Check PDP Source:** Confirm `<div id="metrics-json">` is rendered with valid JSON.
+- **Inspect Console:** JS errors in `productDetail.js` may indicate malformed data or template issues.
+- **Use Raw JSON:** For debugging, `pdict.activeDataJSONString` is available in the controller.
+- **Log Rendering Data:** Add `console.log(metric)` in JS to inspect values and thresholds.
 
-| Layer              | What You Can Change                      |
-|-------------------|-------------------------------------------|
-| Backend Helper     | Add new metrics, adjust formatting logic |
-| Site Preferences   | Define tier thresholds globally           |
-| Content Assets     | Override labels, emojis, thresholds       |
-| CSS Classes        | Extend with new animations or styles      |
+### ✅ Implementation Checklist
 
----
+- [x] Backend helper includes `getFormattedMetrics(product)`
+- [x] Controller injects `pdict.metricsJSONString` and optionally `activeDataJSONString`
+- [x] ISML template includes `#metrics-json` block
+- [x] Content asset contains `.social-proof` blocks with `data-key` and `data-template`
+- [x] Frontend JS is included and parses/render correctly
+- [x] Site preferences are defined for each metric (or defaults are acceptable)
 
-### 📌 Next Steps (Optional)
+## 📌 Final Notes
 
-- [ ] Add more metrics (e.g., impressions, days available)
-- [ ] Enable desktop version of the callouts (currently mobile-only)
-- [ ] Localize labels based on site locale
-- [ ] Track clickthrough or visibility for analytics
+The Active Data Callout system is:
 
----
+- 🔄 **Flexible** — supports multiple metrics, thresholds, and overrides
+- 🔐 **Safe** — fails gracefully on missing or invalid data
+- 🎯 **A/B test-ready** — integrates cleanly with SFCC campaigns
+- ✏️ **Easy to manage** — content authors can control messaging without deployment
 
-### 🙋 FAQ
+## 🚀 Next Steps (Optional Enhancements)
 
-**Q:** What if the product has no active data?  
-**A:** The callout will not display — this is intentional to avoid confusing users.
-
-**Q:** Can I show different emojis for different tiers?  
-**A:** Not natively, but you can simulate it by using template logic and `data-emoji`.
-
-**Q:** Can this work in other parts of the site?  
-**A:** Yes — as long as the controller exposes the correct JSON and `#metrics-json` is present.
-
----
+- [ ] Add more metrics (e.g., impressions, click-through rate, days active)
+- [ ] Localize tier labels and emoji for multilingual sites
+- [ ] Expand desktop rendering logic (currently mobile-focused)
+- [ ] Expose Active Data on other templates (e.g., category, search)
